@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Smart Expense Tracker Advanced</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@2/dist/tesseract.min.js"></script>
+
+<style>
+body{font-family: Arial;background: linear-gradient(135deg,#4facfe,#00f2fe);margin:0;padding:0;}
+.dark{background:#121212;color:white;}
+.container{width:95%;margin:20px auto;background:white;border-radius:10px;display:flex;padding:20px;}
+.dark .container{background:#1e1e1e;}
+.left,.right{padding:20px;}
+.left{width:50%;}
+.right{width:50%;}
+input,select,button{width:95%;padding:10px;margin:8px 0;}
+button{background:#4CAF50;color:white;border:none;cursor:pointer;}
+button:hover{background:#45a049;}
+table{width:100%;margin-top:10px;border-collapse:collapse;}
+th,td{padding:8px;border-bottom:1px solid #ddd;text-align:center;}
+img{width:50px;height:50px;}
+.warning{color:red;font-weight:bold;}
+.topbar{padding:10px;text-align:right;}
+</style>
+</head>
+
+<body>
+
+<div class="topbar">
+<button onclick="toggleDark()">🌙 Toggle Dark Mode</button>
+</div>
+
+<div id="loginBox" style="padding:20px;text-align:center;">
+<h2>Login / Signup</h2>
+
+<input id="username" placeholder="Username">
+<input id="password" type="password" placeholder="Password">
+
+<button onclick="signup()">Sign Up</button>
+<button onclick="login()">Login</button>
+
+<p id="authMsg" style="color:green;font-weight:bold;"></p>
+</div>
+
+<div class="container" id="mainApp" style="display:none;">
+
+<div class="left">
+<h2>Expense Tracker</h2>
+
+<input id="name" placeholder="Expense Name">
+<input id="amount" type="number" placeholder="Amount">
+<input id="date" type="date">
+
+<select id="category">
+<option>Food</option>
+<option>Transport</option>
+<option>Shopping</option>
+<option>Entertainment</option>
+<option>Other</option>
+</select>
+
+<input type="file" id="receipt">
+<img id="preview" style="display:none;">
+
+<button onclick="addExpense()">Add Expense</button>
+
+<input id="search" placeholder="Search" onkeyup="searchExpense()">
+
+<p id="insight" class="warning"></p>
+
+<table>
+<thead>
+<tr><th>Name</th><th>Category</th><th>Amount</th><th>Date</th><th>Receipt</th><th>Action</th></tr>
+</thead>
+<tbody id="list"></tbody>
+</table>
+
+<h3>Total: ₹<span id="total">0</span></h3>
+<h3>Income: ₹<span id="income">5000</span></h3>
+<h3>Balance: ₹<span id="balance">5000</span></h3>
+
+<button onclick="exportData()">Export Data</button>
+
+</div>
+
+<div class="right">
+<canvas id="chart"></canvas>
+</div>
+</div>
+
+<script>
+
+// LOGIN
+function signup(){
+let u=document.getElementById("username").value;
+let p=document.getElementById("password").value;
+
+if(!u || !p){alert("Enter details"); return;}
+
+localStorage.setItem(u,p);
+document.getElementById("authMsg").innerText="Signup successful!";
+}
+
+function login(){
+let u=document.getElementById("username").value;
+let p=document.getElementById("password").value;
+
+if(localStorage.getItem(u)===p){
+document.getElementById("authMsg").innerText="✅ Login Successful!";
+setTimeout(()=>{
+document.getElementById("loginBox").style.display="none";
+document.getElementById("mainApp").style.display="flex";
+},1000);
+}else{
+document.getElementById("authMsg").innerText="❌ Invalid login";
+}
+}
+
+// VARIABLES
+let total=0;
+let income=5000;
+let chart;
+
+let categoryTotal={Food:0,Transport:0,Shopping:0,Entertainment:0,Other:0};
+let categoryBudget={Food:2000,Transport:1500,Shopping:2500,Entertainment:1200,Other:1000};
+
+function toggleDark(){document.body.classList.toggle("dark");}
+
+// OCR
+function previewImage(){
+let file=document.getElementById("receipt").files[0];
+let reader=new FileReader();
+
+reader.onload=function(e){
+document.getElementById("preview").src=e.target.result;
+document.getElementById("preview").style.display="block";
+
+Tesseract.recognize(e.target.result,'eng')
+.then(({data:{text}})=>{
+
+let nums=text.match(/\d+/g);
+if(nums){
+document.getElementById("amount").value=Math.max(...nums.map(Number));
+}
+
+let d=text.match(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/);
+if(d){
+let parts=d[0].replace(/-/g,"/").split("/");
+let day=parts[0].padStart(2,'0');
+let mon=parts[1].padStart(2,'0');
+let yr=parts[2].length==2?"20"+parts[2]:parts[2];
+document.getElementById("date").value = `${yr}-${mon}-${day}`;
+}
+
+let t=text.toLowerCase();
+if(t.includes("pizza")||t.includes("food")){name.value="Food Expense";category.value="Food";}
+else if(t.includes("uber")||t.includes("taxi")){name.value="Transport";category.value="Transport";}
+else if(t.includes("shop")||t.includes("mall")){name.value="Shopping";category.value="Shopping";}
+else{name.value="Expense";}
+
+});
+}
+
+if(file) reader.readAsDataURL(file);
+}
+
+document.getElementById("receipt").addEventListener("change",previewImage);
+
+// CHART
+function createChart(){
+chart=new Chart(document.getElementById("chart"),{
+type:'pie',
+data:{labels:Object.keys(categoryTotal),datasets:[{data:Object.values(categoryTotal)}]}
+});
+}
+createChart();
+
+function updateChart(){
+chart.data.datasets[0].data=Object.values(categoryTotal);
+chart.update();
+}
+
+// ADD EXPENSE
+function addExpense(){
+
+let nameVal=document.getElementById("name").value;
+let amountVal=Number(document.getElementById("amount").value);
+let categoryVal=document.getElementById("category").value;
+let dateVal=document.getElementById("date").value;
+let img=document.getElementById("preview").src || "";
+let insight=document.getElementById("insight");
+
+if(nameVal==""||amountVal==""){alert("Enter details");return;}
+
+if(nameVal.toLowerCase().includes("pizza")) categoryVal="Food";
+
+let row=document.getElementById("list").insertRow();
+row.innerHTML = `
+<td>${nameVal}</td>
+<td>${categoryVal}</td>
+<td>${amountVal}</td>
+<td>${dateVal}</td>
+<td><img src='${img}'></td>
+<td><button onclick="this.parentElement.parentElement.remove()">Delete</button></td>
+`;
+
+total+=amountVal;
+categoryTotal[categoryVal]+=amountVal;
+
+let remaining = categoryBudget[categoryVal] - categoryTotal[categoryVal];
+
+let today = new Date();
+let currentDay = today.getDate();
+let totalDays = 30;
+let daysLeft = totalDays - currentDay;
+if(daysLeft <= 0) daysLeft = 1;
+
+let dailyLimit = Math.floor(remaining / daysLeft);
+
+if(remaining < 0){
+insight.innerText = "⚠ You exceeded " + categoryVal + " budget by ₹" + Math.abs(remaining) +
+"\n👉 Reduce spending in " + categoryVal + " for next 5 days";
+}else{
+insight.innerText = "💡 Remaining " + categoryVal + " budget: ₹" + remaining +
+"\n👉 Daily safe spend: ₹" + dailyLimit + " for next " + daysLeft + " days";
+}
+
+if(categoryTotal[categoryVal]>categoryBudget[categoryVal]) alert("⚠ Budget exceeded in "+categoryVal);
+else if(categoryTotal[categoryVal] > categoryBudget[categoryVal]*0.8) alert("⚠ 80% budget reached in "+categoryVal);
+
+if(categoryVal=="Shopping") alert("💡 Reduce shopping expenses!");
+
+if(total<income) console.log("🎉 Good saving");
+
+document.getElementById("total").innerText=total;
+document.getElementById("balance").innerText=income-total;
+
+updateChart();
+
+document.getElementById("name").value="";
+document.getElementById("amount").value="";
+document.getElementById("preview").style.display="none";
+}
+
+// SEARCH
+function searchExpense(){
+let input=document.getElementById("search").value.toLowerCase();
+document.querySelectorAll("#list tr").forEach(r=>{
+r.style.display=r.innerText.toLowerCase().includes(input)?"":"none";
+});
+}
+
+// EXPORT
+function exportData(){
+let data=[];
+document.querySelectorAll("#list tr").forEach(r=>{
+let c=r.children;
+data.push({name:c[0].innerText,category:c[1].innerText,amount:c[2].innerText});
+});
+let blob=new Blob([JSON.stringify(data)],{type:"application/json"});
+let a=document.createElement("a");
+a.href=URL.createObjectURL(blob);
+a.download="expenses.json";
+a.click();
+}
+
+</script>
+
+</body>
+</html>
